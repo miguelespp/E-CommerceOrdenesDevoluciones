@@ -224,10 +224,14 @@ export class KafkaConsumerService {
   }
 
   private async actualizarOrdenConDevolucion(event: any) {
-    console.log(`Evento de devolución creada recibido por Kafka:`, event);
+    console.log(`Evento de devolución creada recibido por Kafka:`, JSON.stringify(event, null, 2));
 
     if (!event || !event.orden_id || !event.id) {
-      console.error('Evento de devolución con datos insuficientes, ignorando.');
+      console.error('Evento de devolución con datos insuficientes, ignorando.', {
+        hasEvent: !!event,
+        hasOrdenId: !!event?.orden_id,
+        hasId: !!event?.id,
+      });
       return;
     }
 
@@ -263,6 +267,22 @@ export class KafkaConsumerService {
 
     console.log('Historial mapeado para MongoDB:', historialProjection);
 
+    // Mapear items correctamente
+    const itemsProjection = (event.items || []).map((item: any) => ({
+      id: item.id,
+      devolucion_id: item.devolucion_id,
+      tipo_accion: item.tipo_accion,
+      producto_id_dev: item.producto_id_dev,
+      precio_unitario_dev: item.precio_unitario_dev,
+      cantidad_dev: item.cantidad_dev,
+      producto_id_new: item.producto_id_new || null,
+      precio_unitario_new: item.precio_unitario_new || null,
+      cantidad_new: item.cantidad_new || null,
+      motivo: item.motivo || null,
+    }));
+
+    console.log('Items mapeados para MongoDB:', itemsProjection);
+
     await devoluciones.findOneAndUpdate(
       { id: event.id }, // FILTRO: Buscar por el ID de la devolución (que es único)
       {
@@ -272,13 +292,13 @@ export class KafkaConsumerService {
           codDevolucion: event.codDevolucion,
           estado: event.estado,
           createdAt: new Date(event.createdAt),
-          items: event.items ?? [],
+          items: itemsProjection,
           historial: historialProjection,
         },
       },
       {
         upsert: true,
-        new: true,
+        returnDocument: 'after',
       },
     );
     console.log(`Proyección de devolución ${event.id} creada en order-query.`);

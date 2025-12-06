@@ -348,24 +348,6 @@ export class DevolucionService {
     return devolucion;
   }
 
-  async updateReturnStatus(id: string, status: string) {
-    const devolucion = await this.findOne(id);
-    devolucion.estado = status as EstadoDevolucion;
-    return await this.devolucionRepository.save(devolucion);
-  }
-
-  async markAsCompleted(id: string) {
-    const devolucion = await this.findOne(id);
-    devolucion.estado = EstadoDevolucion.COMPLETADO;
-    return await this.devolucionRepository.save(devolucion);
-  }
-
-  async markAsCancelled(id: string) {
-    const devolucion = await this.findOne(id);
-    devolucion.estado = EstadoDevolucion.CANCELADO;
-    return await this.devolucionRepository.save(devolucion);
-  }
-
   async aprobarDevolucion(
     id: string,
     aprobarDto: AprobarDevolucionDto,
@@ -381,7 +363,7 @@ export class DevolucionService {
       );
     }
 
-    const order = await this.orderService.getOrderById(devolucion.orden_id);
+    const order: any = await this.orderService.getOrderById(devolucion.orden_id);
     if (!order) {
       throw new NotFoundException(
         `Order with ID ${devolucion.orden_id} not found`,
@@ -394,21 +376,60 @@ export class DevolucionService {
     //devolucion.fecha_procesamiento = new Date();
 
     // 2. **LÓGICA DE REEMPLAZO/REEMBOLSO**
-    /*
-    // Habilitar cuando se tenga un metodo para crear una nueva orden
+    
     //2a. Reemplazo: Crear Orden Nueva (Si aplica)
     const itemsReemplazo = devolucion.items.filter(i => i.tipo_accion === AccionItemDevolucion.REEMPLAZO);
     if (itemsReemplazo.length > 0) {
-        // Asumiendo que orderService tiene un método para crear la orden de reemplazo
-        const nuevaOrden = await this.orderService.createReplacementOrder(
-            devolucion.orden_id,
-            itemsReemplazo,
-            aprobarDto.adminId,
+      this.logger.log(`Procesando reemplazo para devolución ${id} con ${itemsReemplazo.length} items`);
+      
+      try {
+        // Validar que todos los items de reemplazo tengan datos completos
+        const itemsValidos = itemsReemplazo.every(item => 
+          item.producto_id_new && item.cantidad_new && item.precio_unitario_new
         );
-        devolucion.orden_reemplazo_id = nuevaOrden.id;
+
+        if (!itemsValidos) {
+          this.logger.warn(`No se puede crear orden de reemplazo: items incompletos`);
+        } else {
+          // Construir los items para la nueva orden
+          const newOrderItems = itemsReemplazo.map(item => ({
+            productoId: item.producto_id_new!,
+            nombreProducto: `Producto ${item.producto_id_new}`, // Idealmente obtener del catálogo
+            cantidad: item.cantidad_new!,
+            precioUnitario: item.precio_unitario_new!,
+            subTotal: item.precio_unitario_new! * item.cantidad_new!,
+          }));
+
+          // Calcular costos
+          const subtotal = newOrderItems.reduce((sum, item) => sum + item.subTotal, 0);
+          const envio = order.costos?.envio || 0; // Reutilizar costo de envío original
+          const total = subtotal + envio;
+
+          // Crear la orden de reemplazo
+          const nuevaOrden = await this.orderService.createReplacementOrder({
+            usuarioId: order.usuarioId,
+            direccionEnvio: order.direccionEnvio,
+            costos: {
+              subtotal,
+              envio,
+              total,
+            },
+            entrega: order.entrega,
+            metodoPago: order.metodoPago || 'REEMPLAZO',
+            estadoInicial: 'PENDIENTE',
+            items: newOrderItems,
+          });
+
+          devolucion.orden_reemplazo_id = nuevaOrden.orden_id;
+          this.logger.log(`Orden de reemplazo ${nuevaOrden.orden_id} creada exitosamente`);
+        }
+      } catch (error) {
+        this.logger.error(`Error al crear orden de reemplazo: ${error.message}`, error.stack);
+        // No bloqueamos la aprobación si falla la creación del reemplazo
+        // Podríamos emitir un evento de error para notificar al admin
+      }
     }
 
-*/
     // 2b. Reembolso: Marcar para ingreso de datos de cuenta (Si aplica)
     const itemsReembolso = devolucion.items.filter(
       (i) => i.tipo_accion === AccionItemDevolucion.REEMBOLSO,
