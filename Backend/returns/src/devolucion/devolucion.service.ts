@@ -379,6 +379,8 @@ export class DevolucionService {
     
     //2a. Reemplazo: Crear Orden Nueva (Si aplica)
     const itemsReemplazo = devolucion.items.filter(i => i.tipo_accion === AccionItemDevolucion.REEMPLAZO);
+    this.logger.log(`Items totales: ${devolucion.items.length}, Items de reemplazo: ${itemsReemplazo.length}`);
+    
     if (itemsReemplazo.length > 0) {
       this.logger.log(`Procesando reemplazo para devolución ${id} con ${itemsReemplazo.length} items`);
       
@@ -387,6 +389,11 @@ export class DevolucionService {
         const itemsValidos = itemsReemplazo.every(item => 
           item.producto_id_new && item.cantidad_new && item.precio_unitario_new
         );
+
+        this.logger.log(`Items válidos para reemplazo: ${itemsValidos}`);
+        itemsReemplazo.forEach((item, idx) => {
+          this.logger.log(`Item ${idx}: producto_id_new=${item.producto_id_new}, cantidad_new=${item.cantidad_new}, precio_unitario_new=${item.precio_unitario_new}`);
+        });
 
         if (!itemsValidos) {
           this.logger.warn(`No se puede crear orden de reemplazo: items incompletos`);
@@ -405,6 +412,9 @@ export class DevolucionService {
           const envio = order.costos?.envio || 0; // Reutilizar costo de envío original
           const total = subtotal + envio;
 
+          this.logger.log(`Creando orden de reemplazo - Subtotal: ${subtotal}, Envio: ${envio}, Total: ${total}`);
+          this.logger.log(`Items a enviar: ${JSON.stringify(newOrderItems)}`);
+
           // Crear la orden de reemplazo
           const nuevaOrden = await this.orderService.createReplacementOrder({
             usuarioId: order.usuarioId,
@@ -421,7 +431,7 @@ export class DevolucionService {
           });
 
           devolucion.orden_reemplazo_id = nuevaOrden.orden_id;
-          this.logger.log(`Orden de reemplazo ${nuevaOrden.orden_id} creada exitosamente`);
+          this.logger.log(`✅ Orden de reemplazo ${nuevaOrden.orden_id} creada exitosamente`);
         }
       } catch (error) {
         this.logger.error(`Error al crear orden de reemplazo: ${error.message}`, error.stack);
