@@ -69,7 +69,7 @@ export interface CreateReplacementOrderDto {
 export class OrderService {
     // --- NUEVA LÍNEA ---
     private readonly ordersApiUrl = process.env.ORDERS_API_URL || 'http://localhost:3002'; // Por defecto, apuntamos a orders-query en el puerto 3002
-    private readonly ordersCommandUrl = process.env.ORDERS_COMMAND_URL || 'http://localhost:3000'; // orders-command para crear órdenes
+    private readonly ordersCommandUrl = process.env.ORDERS_COMMAND_API_URL || 'http://localhost:3000'; // orders-command para crear órdenes
 
     constructor(private readonly httpClient: HttpService) { }
 
